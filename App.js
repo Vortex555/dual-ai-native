@@ -245,23 +245,22 @@ export default function App() {
     try {
       const modelPath = `${FileSystem.documentDirectory}mistral-7b-instruct-q4.gguf`;
       
-      /* Real implementation with react-native-llama:
-      const context = await initLlama({
-        model: modelPath,
-        n_ctx: 2048,
-        n_batch: 512,
-        n_threads: 4, // Use 4 CPU threads
-        use_mlock: true,
-      });
+      // Load the model using AIService
+      const result = await aiService.current.loadLocalModel(modelPath);
       
-      llamaContext.current = context;
-      */
-      
-      setModelLoaded(true);
-      setShowWelcome(false);
-      Alert.alert('Success', 'Model loaded successfully!');
+      if (result.success) {
+        setModelLoaded(true);
+        setShowWelcome(false);
+        Alert.alert('Success', 'Model loaded successfully! You can now use offline AI.');
+      } else {
+        throw new Error(result.error || 'Failed to load model');
+      }
     } catch (error) {
-      Alert.alert('Error', `Failed to initialize model: ${error.message}`);
+      console.error('Model initialization error:', error);
+      Alert.alert(
+        'Error Loading Model', 
+        `${error.message}\n\nTry:\n• Restarting the app\n• Re-downloading the model\n• Closing other apps to free memory`
+      );
     } finally {
       setIsInitializing(false);
     }

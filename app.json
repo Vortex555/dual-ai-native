@@ -5,13 +5,28 @@
     "version": "1.0.0",
     "orientation": "portrait",
     "userInterfaceStyle": "automatic",
+    "plugins": [
+      "llama.rn"
+    ],
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.mistralnative.mobile"
+      "bundleIdentifier": "com.mistralnative.mobile",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
     },
     "android": {
       "package": "com.mistralnative.mobile",
-      "permissions": ["READ_EXTERNAL_STORAGE", "WRITE_EXTERNAL_STORAGE"]
-    }
+      "permissions": [
+        "READ_EXTERNAL_STORAGE",
+        "WRITE_EXTERNAL_STORAGE"
+      ]
+    },
+    "extra": {
+      "eas": {
+        "projectId": "819bc4a0-16ac-4eff-a6e8-5f07fd399eaa"
+      }
+    },
+    "owner": "vortex55"
   }
 }

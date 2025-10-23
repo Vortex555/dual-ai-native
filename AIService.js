@@ -1,5 +1,6 @@
 // AI Service - Handles both online and offline AI inference
 import axios from 'axios';
+import { initLlama, convertJsonSchemaToGrammar, } from 'llama.rn';
 
 export class AIService {
   constructor() {
@@ -114,31 +115,28 @@ export class AIService {
       // Build prompt from conversation history
       const prompt = this.buildPrompt(messages);
 
-      // Generate response using llama.cpp
-      // This would use react-native-llama when integrated
-      /* 
-      const response = await this.llamaContext.completion({
-        prompt: prompt,
-        n_predict: 512,
-        temperature: 0.7,
-        top_k: 40,
-        top_p: 0.9,
-        stop: ['</s>', 'User:', '\nUser:'],
-      });
+      // Generate response using llama.cpp via llama.rn
+      const response = await this.llamaContext.completion(
+        {
+          prompt: prompt,
+          n_predict: 512,
+          temperature: 0.7,
+          top_k: 40,
+          top_p: 0.9,
+          stop: ['</s>', 'User:', '\nUser:', '[INST]'],
+        },
+        (data) => {
+          // Stream token-by-token (optional)
+          if (onChunk) {
+            onChunk(data.token);
+          }
+        }
+      );
       
       return {
         success: true,
         text: response.text.trim(),
         mode: 'offline'
-      };
-      */
-
-      // Demo response for now (until native module is integrated)
-      return {
-        success: false,
-        error: 'Offline mode requires native integration',
-        text: '🤖 Offline AI Response (Demo)\n\nThis is a simulated response. To use the actual downloaded model, you need to:\n\n1. Build native modules with llama.cpp\n2. Integrate react-native-llama\n3. Load the downloaded GGUF model\n\nFor now, please use Online Mode for real AI responses!',
-        mode: 'offline-demo'
       };
 
     } catch (error) {
@@ -146,7 +144,7 @@ export class AIService {
       return {
         success: false,
         error: error.message,
-        text: error.message,
+        text: `Error running offline AI: ${error.message}\n\nMake sure:\n1. Model is downloaded\n2. App has enough memory (close other apps)\n3. Try restarting the app`,
         mode: 'offline'
       };
     }
@@ -184,25 +182,23 @@ export class AIService {
 
   async loadLocalModel(modelPath) {
     try {
-      // This would initialize llama.cpp context
-      // For now, just simulate
       console.log('Loading model from:', modelPath);
       
-      /*
+      // Initialize llama.cpp context with the downloaded model
       const context = await initLlama({
         model: modelPath,
-        n_ctx: 2048,
-        n_batch: 512,
-        n_threads: 4,
-        use_mlock: true,
+        n_ctx: 2048,        // Context window size
+        n_batch: 512,       // Batch size for processing
+        n_threads: 4,       // Number of CPU threads (adjust for device)
+        use_mlock: true,    // Keep model in RAM for faster inference
+        n_gpu_layers: 0,    // Use CPU (Metal GPU support coming soon)
       });
       
       this.llamaContext = context;
-      */
       
       return {
-        success: false,
-        error: 'Native integration required'
+        success: true,
+        message: 'Model loaded successfully!'
       };
     } catch (error) {
       console.error('Error loading model:', error);
@@ -211,6 +207,20 @@ export class AIService {
         error: error.message
       };
     }
+  }
+  
+  async releaseModel() {
+    if (this.llamaContext) {
+      try {
+        await this.llamaContext.release();
+        this.llamaContext = null;
+        return { success: true };
+      } catch (error) {
+        console.error('Error releasing model:', error);
+        return { success: false, error: error.message };
+      }
+    }
+    return { success: true };
   }
 }
 
