@@ -33,8 +33,11 @@ export default function App() {
   const [downloadProgress, setDownloadProgress] = useState(0);
   const [downloadSpeed, setDownloadSpeed] = useState(0);
   const [isPaused, setIsPaused] = useState(false);
-  const [showWelcome, setShowWelcome] = useState(true);
+  const [showWelcome, setShowWelcome] = useState(false); // Changed to false - skip welcome by default
   const [showSettings, setShowSettings] = useState(false);
+  const [showChatHistory, setShowChatHistory] = useState(false);
+  const [chatSessions, setChatSessions] = useState([]);
+  const [currentSessionId, setCurrentSessionId] = useState(null);
   const [aiMode, setAiMode] = useState('online'); // 'online' or 'offline'
   const [apiKey, setApiKey] = useState('');
   const scrollViewRef = useRef();
@@ -48,6 +51,7 @@ export default function App() {
     checkModelStatus();
     loadMessages();
     loadSettings();
+    loadChatSessions();
     autoInitializeModel();
   }, []);
 
@@ -75,10 +79,7 @@ export default function App() {
       const modelPath = `${FileSystem.documentDirectory}mistral-7b-instruct-q4.gguf`;
       const fileInfo = await FileSystem.getInfoAsync(modelPath);
       setModelLoaded(fileInfo.exists);
-      
-      if (fileInfo.exists) {
-        setShowWelcome(false);
-      }
+      // Removed: No longer auto-hide welcome screen
     } catch (error) {
       console.error('Error checking model:', error);
       setModelLoaded(false);
@@ -132,9 +133,143 @@ export default function App() {
   const saveMessages = async (newMessages) => {
     try {
       await AsyncStorage.setItem('chat_messages', JSON.stringify(newMessages));
+      // Also save to current session
+      if (currentSessionId) {
+        await saveChatSession(currentSessionId, newMessages);
+      }
     } catch (error) {
       console.error('Error saving messages:', error);
     }
+  };
+
+  // Chat Sessions Management
+  const loadChatSessions = async () => {
+    try {
+      const sessionsData = await AsyncStorage.getItem('chat_sessions');
+      if (sessionsData) {
+        const sessions = JSON.parse(sessionsData);
+        setChatSessions(sessions);
+        
+        // Load the most recent session or create new one
+        if (sessions.length > 0) {
+          const lastSession = sessions[0];
+          setCurrentSessionId(lastSession.id);
+          setMessages(lastSession.messages || []);
+        } else {
+          createNewChat();
+        }
+      } else {
+        createNewChat();
+      }
+    } catch (error) {
+      console.error('Error loading chat sessions:', error);
+      createNewChat();
+    }
+  };
+
+  const saveChatSession = async (sessionId, sessionMessages) => {
+    try {
+      const sessionsData = await AsyncStorage.getItem('chat_sessions');
+      let sessions = sessionsData ? JSON.parse(sessionsData) : [];
+      
+      const sessionIndex = sessions.findIndex(s => s.id === sessionId);
+      const sessionTitle = sessionMessages.length > 0 
+        ? sessionMessages[0].text.substring(0, 30) + (sessionMessages[0].text.length > 30 ? '...' : '')
+        : 'New Chat';
+      
+      const updatedSession = {
+        id: sessionId,
+        title: sessionTitle,
+        messages: sessionMessages,
+        timestamp: Date.now(),
+      };
+      
+      if (sessionIndex >= 0) {
+        sessions[sessionIndex] = updatedSession;
+      } else {
+        sessions.unshift(updatedSession);
+      }
+      
+      // Keep only last 50 sessions
+      sessions = sessions.slice(0, 50);
+      
+      await AsyncStorage.setItem('chat_sessions', JSON.stringify(sessions));
+      setChatSessions(sessions);
+    } catch (error) {
+      console.error('Error saving chat session:', error);
+    }
+  };
+
+  const createNewChat = () => {
+    const newSessionId = Date.now().toString();
+    setCurrentSessionId(newSessionId);
+    setMessages([]);
+    setShowChatHistory(false);
+  };
+
+  const loadChatSession = (sessionId) => {
+    const session = chatSessions.find(s => s.id === sessionId);
+    if (session) {
+      setCurrentSessionId(session.id);
+      setMessages(session.messages || []);
+      setShowChatHistory(false);
+    }
+  };
+
+  const deleteChatSession = async (sessionId) => {
+    try {
+      const updatedSessions = chatSessions.filter(s => s.id !== sessionId);
+      await AsyncStorage.setItem('chat_sessions', JSON.stringify(updatedSessions));
+      setChatSessions(updatedSessions);
+      
+      // If deleted current session, create new one
+      if (sessionId === currentSessionId) {
+        if (updatedSessions.length > 0) {
+          loadChatSession(updatedSessions[0].id);
+        } else {
+          createNewChat();
+        }
+      }
+    } catch (error) {
+      console.error('Error deleting chat session:', error);
+    }
+  };
+
+  const deleteModel = async () => {
+    Alert.alert(
+      'Delete Model',
+      'This will permanently delete the downloaded model file (4GB). You can re-download it later from settings.\n\nAre you sure?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              const modelPath = `${FileSystem.documentDirectory}mistral-7b-instruct-q4.gguf`;
+              await FileSystem.deleteAsync(modelPath, { idempotent: true });
+              
+              // Release model from memory if loaded
+              if (aiService.current.llamaContext) {
+                await aiService.current.releaseModel();
+              }
+              
+              setModelLoaded(false);
+              
+              // Switch to online mode if in offline mode
+              if (aiMode === 'offline') {
+                setAiMode('online');
+                await saveSettings('online', apiKey);
+              }
+              
+              Alert.alert('Success', 'Model deleted successfully. You can re-download it from settings if needed.');
+            } catch (error) {
+              Alert.alert('Error', `Failed to delete model: ${error.message}`);
+            }
+          }
+        }
+      ]
+    );
   };
 
   const downloadModel = async () => {
@@ -488,6 +623,17 @@ export default function App() {
                 <Text style={styles.downloadButtonText}>Download Model (~4GB)</Text>
               </TouchableOpacity>
 
+              <TouchableOpacity
+                style={styles.skipButton}
+                onPress={() => {
+                  setShowWelcome(false);
+                  setAiMode('online');
+                  saveSettings('online', apiKey);
+                }}
+              >
+                <Text style={styles.skipButtonText}>Skip - Use Online Mode</Text>
+              </TouchableOpacity>
+
               {modelLoaded && (
                 <TouchableOpacity
                   style={styles.continueButton}
@@ -527,6 +673,9 @@ export default function App() {
             </View>
           </View>
           <View style={styles.headerButtons}>
+            <TouchableOpacity onPress={() => setShowChatHistory(true)} style={styles.headerButton}>
+              <Ionicons name="chatbubbles-outline" size={24} color="#fff" />
+            </TouchableOpacity>
             <TouchableOpacity onPress={() => setShowSettings(true)} style={styles.headerButton}>
               <Ionicons name="settings-outline" size={24} color="#fff" />
             </TouchableOpacity>
@@ -721,13 +870,58 @@ export default function App() {
                   </Text>
                 </View>
                 <View style={styles.statusRow}>
+                  <Text style={styles.statusLabel}>Model:</Text>
+                  <Text style={styles.statusValue}>Mistral 7B Instruct v0.2 (Q4)</Text>
+                </View>
+                <View style={styles.statusRow}>
                   <Text style={styles.statusLabel}>Size:</Text>
                   <Text style={styles.statusValue}>4.08 GB</Text>
                 </View>
-                {!modelLoaded && (
-                  <Text style={styles.infoText}>
-                    Download the model to use offline mode. The model runs entirely on your device.
-                  </Text>
+                {!modelLoaded ? (
+                  <>
+                    <Text style={styles.infoText}>
+                      Download the model to use offline mode. The model runs entirely on your device.
+                    </Text>
+                    <TouchableOpacity
+                      style={styles.downloadButton}
+                      onPress={downloadModel}
+                    >
+                      <Ionicons name="download" size={20} color="#fff" />
+                      <Text style={styles.downloadButtonText}>Download Model</Text>
+                    </TouchableOpacity>
+                  </>
+                ) : (
+                  <View style={styles.modelActions}>
+                    <TouchableOpacity
+                      style={styles.redownloadButton}
+                      onPress={() => {
+                        Alert.alert(
+                          'Re-download Model',
+                          'This will delete the existing model and download it again. Continue?',
+                          [
+                            { text: 'Cancel', style: 'cancel' },
+                            {
+                              text: 'Re-download',
+                              onPress: async () => {
+                                await deleteModel();
+                                setTimeout(() => downloadModel(), 500);
+                              }
+                            }
+                          ]
+                        );
+                      }}
+                    >
+                      <Ionicons name="refresh" size={20} color="#2196F3" />
+                      <Text style={styles.redownloadButtonText}>Re-download</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={styles.deleteButton}
+                      onPress={deleteModel}
+                    >
+                      <Ionicons name="trash" size={20} color="#f44336" />
+                      <Text style={styles.deleteButtonText}>Delete Model</Text>
+                    </TouchableOpacity>
+                  </View>
                 )}
               </View>
 
@@ -753,6 +947,82 @@ export default function App() {
               </View>
             </ScrollView>
           </View>
+        </SafeAreaView>
+      </Modal>
+
+      {/* Chat History Modal */}
+      <Modal
+        visible={showChatHistory}
+        animationType="slide"
+        transparent={false}
+        onRequestClose={() => setShowChatHistory(false)}
+      >
+        <SafeAreaView style={[styles.container, { paddingTop: 0 }]}>
+          <View style={styles.settingsHeader}>
+            <TouchableOpacity onPress={() => setShowChatHistory(false)} style={styles.closeButton}>
+              <Ionicons name="close" size={28} color="#fff" />
+            </TouchableOpacity>
+            <Text style={styles.settingsTitle}>Chat History</Text>
+            <TouchableOpacity onPress={createNewChat} style={styles.newChatButton}>
+              <Ionicons name="add" size={28} color="#fff" />
+            </TouchableOpacity>
+          </View>
+          
+          <ScrollView style={styles.chatHistoryList}>
+            {chatSessions.length === 0 ? (
+              <View style={styles.emptyState}>
+                <Ionicons name="chatbubbles-outline" size={64} color="#666" />
+                <Text style={styles.emptyStateText}>No chat history yet</Text>
+                <Text style={styles.emptyStateSubtext}>Start a conversation to see it here</Text>
+              </View>
+            ) : (
+              chatSessions.map((session) => (
+                <View key={session.id} style={styles.chatSessionItem}>
+                  <TouchableOpacity
+                    style={[
+                      styles.chatSessionContent,
+                      session.id === currentSessionId && styles.chatSessionActive
+                    ]}
+                    onPress={() => loadChatSession(session.id)}
+                  >
+                    <View style={styles.chatSessionInfo}>
+                      <Text style={styles.chatSessionTitle} numberOfLines={1}>
+                        {session.title || 'New Chat'}
+                      </Text>
+                      <Text style={styles.chatSessionDate}>
+                        {new Date(session.timestamp).toLocaleDateString()} {new Date(session.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      </Text>
+                      <Text style={styles.chatSessionMessages}>
+                        {session.messages?.length || 0} messages
+                      </Text>
+                    </View>
+                    {session.id === currentSessionId && (
+                      <Ionicons name="checkmark-circle" size={24} color="#4CAF50" />
+                    )}
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.deleteSessionButton}
+                    onPress={() => {
+                      Alert.alert(
+                        'Delete Chat',
+                        'Are you sure you want to delete this conversation?',
+                        [
+                          { text: 'Cancel', style: 'cancel' },
+                          {
+                            text: 'Delete',
+                            style: 'destructive',
+                            onPress: () => deleteChatSession(session.id)
+                          }
+                        ]
+                      );
+                    }}
+                  >
+                    <Ionicons name="trash-outline" size={20} color="#f44336" />
+                  </TouchableOpacity>
+                </View>
+              ))
+            )}
+          </ScrollView>
         </SafeAreaView>
       </Modal>
     </View>
@@ -1183,4 +1453,134 @@ const styles = StyleSheet.create({
     color: '#ccc',
     lineHeight: 22,
   },
+  skipButton: {
+    backgroundColor: '#333',
+    padding: 16,
+    borderRadius: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 12,
+    gap: 8,
+    borderWidth: 1,
+    borderColor: '#555',
+  },
+  skipButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  modelActions: {
+    flexDirection: 'row',
+    gap: 12,
+    marginTop: 12,
+  },
+  redownloadButton: {
+    flex: 1,
+    backgroundColor: '#1a1a1a',
+    padding: 14,
+    borderRadius: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    borderWidth: 1,
+    borderColor: '#2196F3',
+  },
+  redownloadButtonText: {
+    color: '#2196F3',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  deleteButton: {
+    flex: 1,
+    backgroundColor: '#1a1a1a',
+    padding: 14,
+    borderRadius: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    borderWidth: 1,
+    borderColor: '#f44336',
+  },
+  deleteButtonText: {
+    color: '#f44336',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  newChatButton: {
+    width: 40,
+    height: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  chatHistoryList: {
+    flex: 1,
+    padding: 16,
+  },
+  emptyState: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingTop: 100,
+  },
+  emptyStateText: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#fff',
+    marginTop: 16,
+  },
+  emptyStateSubtext: {
+    fontSize: 14,
+    color: '#999',
+    marginTop: 8,
+  },
+  chatSessionItem: {
+    backgroundColor: '#2a2a2a',
+    borderRadius: 12,
+    marginBottom: 12,
+    flexDirection: 'row',
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: '#333',
+  },
+  chatSessionContent: {
+    flex: 1,
+    padding: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  chatSessionActive: {
+    backgroundColor: '#1a3a2a',
+  },
+  chatSessionInfo: {
+    flex: 1,
+  },
+  chatSessionTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#fff',
+    marginBottom: 4,
+  },
+  chatSessionDate: {
+    fontSize: 12,
+    color: '#999',
+    marginBottom: 2,
+  },
+  chatSessionMessages: {
+    fontSize: 12,
+    color: '#666',
+  },
+  deleteSessionButton: {
+    padding: 16,
+    justifyContent: 'center',
+    alignItems: 'center',
+    width: 50,
+    backgroundColor: '#1a1a1a',
+    borderLeftWidth: 1,
+    borderLeftColor: '#333',
+  },
 });
+
