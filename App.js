@@ -36,6 +36,7 @@ export default function App() {
   const [showWelcome, setShowWelcome] = useState(false); // Changed to false - skip welcome by default
   const [showSettings, setShowSettings] = useState(false);
   const [showChatHistory, setShowChatHistory] = useState(false);
+  const [showDownloadModal, setShowDownloadModal] = useState(false);
   const [chatSessions, setChatSessions] = useState([]);
   const [currentSessionId, setCurrentSessionId] = useState(null);
   const [aiMode, setAiMode] = useState('online'); // 'online' or 'offline'
@@ -284,64 +285,65 @@ export default function App() {
       return;
     }
 
-    Alert.alert(
-      'Download Model',
-      `This will download Mistral 7B Instruct v0.2 (Q4 quantized, ~4GB).\n\nAvailable space: ${modelDownloader.current.formatBytes(storageCheck.available)}\n\nMake sure you have a stable WiFi connection. The download may take 10-30 minutes.`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Download',
-          onPress: async () => {
-            setIsInitializing(true);
-            setDownloadProgress(0);
-            setDownloadSpeed(0);
-            
-            try {
-              const result = await modelDownloader.current.downloadModel(
-                (progressData) => {
-                  setDownloadProgress(progressData.progress);
-                  setDownloadSpeed(progressData.speed || 0);
-                }
-              );
-              
-              if (result.success) {
-                Alert.alert(
-                  'Download Complete! ✓', 
-                  `Model successfully downloaded (4.08 GB) and verified!\n\nThe model is now ready to use offline.`,
-                  [{ text: 'OK', onPress: () => initializeModel() }]
-                );
-              } else if (result.cancelled) {
-                // User cancelled
-                setIsInitializing(false);
-              } else {
-                throw new Error(result.error || 'Unknown error');
-              }
-              
-            } catch (error) {
-              console.error('Download error:', error);
-              
-              let errorMessage = 'Failed to download model. ';
-              if (error.message.includes('Network') || error.message.includes('network')) {
-                errorMessage += 'Please check your internet connection and try again.';
-              } else if (error.message.includes('space')) {
-                errorMessage += 'Insufficient storage space.';
-              } else if (error.message.includes('404')) {
-                errorMessage += 'Model file not found. The download link may be outdated.';
-              } else {
-                errorMessage += error.message;
-              }
-              
-              Alert.alert('Download Error', errorMessage);
-            } finally {
-              setIsInitializing(false);
-              setDownloadProgress(0);
-              setDownloadSpeed(0);
-              setIsPaused(false);
+    // Show download modal and start download
+    setShowDownloadModal(true);
+    setShowSettings(false); // Close settings if open
+    setIsInitializing(true);
+    setDownloadProgress(0);
+    setDownloadSpeed(0);
+    
+    try {
+      const result = await modelDownloader.current.downloadModel(
+        (progressData) => {
+          setDownloadProgress(progressData.progress);
+          setDownloadSpeed(progressData.speed || 0);
+        }
+      );
+      
+      if (result.success) {
+        setShowDownloadModal(false);
+        setIsInitializing(false);
+        Alert.alert(
+          'Download Complete! ✓', 
+          `Model successfully downloaded (4.08 GB) and verified!\n\nThe model is now ready to use offline.`,
+          [{ 
+            text: 'OK', 
+            onPress: async () => {
+              await checkModelStatus();
+              await initializeModel();
             }
-          },
-        },
-      ]
-    );
+          }]
+        );
+      } else if (result.cancelled) {
+        // User cancelled
+        setShowDownloadModal(false);
+        setIsInitializing(false);
+      } else {
+        throw new Error(result.error || 'Unknown error');
+      }
+      
+    } catch (error) {
+      console.error('Download error:', error);
+      setShowDownloadModal(false);
+      setIsInitializing(false);
+      
+      let errorMessage = 'Failed to download model. ';
+      if (error.message.includes('Network') || error.message.includes('network')) {
+        errorMessage += 'Please check your internet connection and try again.';
+      } else if (error.message.includes('space')) {
+        errorMessage += 'Insufficient storage space.';
+      } else if (error.message.includes('404')) {
+        errorMessage += 'Model file not found. The download link may be outdated.';
+      } else {
+        errorMessage += error.message;
+      }
+      
+      Alert.alert('Download Error', errorMessage);
+    } finally {
+      setDownloadProgress(0);
+      setDownloadSpeed(0);
+      setIsPaused(false);
+    }
   };
 
   const pauseDownload = async () => {
@@ -387,7 +389,10 @@ export default function App() {
               setDownloadProgress(0);
               setDownloadSpeed(0);
               setIsPaused(false);
+              setShowDownloadModal(false);
               Alert.alert('Cancelled', 'Download has been cancelled.');
+            } else {
+              Alert.alert('Error', 'Failed to cancel download');
             }
           },
         },
@@ -1025,6 +1030,84 @@ export default function App() {
           </ScrollView>
         </SafeAreaView>
       </Modal>
+
+      {/* Download Progress Modal */}
+      <Modal
+        visible={showDownloadModal}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => {}}
+      >
+        <View style={styles.downloadModalOverlay}>
+          <View style={styles.downloadModalContent}>
+            <View style={styles.downloadModalHeader}>
+              <Ionicons name="download" size={32} color="#4CAF50" />
+              <Text style={styles.downloadModalTitle}>Downloading Model</Text>
+            </View>
+
+            <View style={styles.downloadProgressSection}>
+              {/* Spinning wheel */}
+              <ActivityIndicator size="large" color="#4CAF50" style={{marginBottom: 20}} />
+              
+              {/* Progress percentage */}
+              <Text style={styles.downloadPercentage}>
+                {(downloadProgress * 100).toFixed(1)}%
+              </Text>
+
+              {/* Progress bar */}
+              <View style={styles.progressBarContainer}>
+                <View style={[styles.progressBarFill, { width: `${downloadProgress * 100}%` }]} />
+              </View>
+
+              {/* Download stats */}
+              <View style={styles.downloadStats}>
+                <View style={styles.downloadStatItem}>
+                  <Text style={styles.downloadStatLabel}>Downloaded:</Text>
+                  <Text style={styles.downloadStatValue}>
+                    {modelDownloader.current.formatBytes(downloadProgress * 4.08 * 1024 * 1024 * 1024)}
+                  </Text>
+                </View>
+                <View style={styles.downloadStatItem}>
+                  <Text style={styles.downloadStatLabel}>Total Size:</Text>
+                  <Text style={styles.downloadStatValue}>4.08 GB</Text>
+                </View>
+                <View style={styles.downloadStatItem}>
+                  <Text style={styles.downloadStatLabel}>Remaining:</Text>
+                  <Text style={styles.downloadStatValue}>
+                    {modelDownloader.current.formatBytes((1 - downloadProgress) * 4.08 * 1024 * 1024 * 1024)}
+                  </Text>
+                </View>
+                <View style={styles.downloadStatItem}>
+                  <Text style={styles.downloadStatLabel}>Speed:</Text>
+                  <Text style={styles.downloadStatValue}>
+                    {modelDownloader.current.formatSpeed(downloadSpeed)}
+                  </Text>
+                </View>
+              </View>
+
+              {/* Estimated time remaining */}
+              {downloadSpeed > 0 && downloadProgress > 0.01 && (
+                <Text style={styles.downloadETA}>
+                  Est. time remaining: {Math.ceil(((1 - downloadProgress) * 4.08 * 1024 * 1024 * 1024) / downloadSpeed / 60)} min
+                </Text>
+              )}
+            </View>
+
+            {/* Cancel button */}
+            <TouchableOpacity
+              style={styles.cancelDownloadButton}
+              onPress={cancelDownload}
+            >
+              <Ionicons name="close-circle" size={20} color="#f44336" />
+              <Text style={styles.cancelDownloadButtonText}>Cancel Download</Text>
+            </TouchableOpacity>
+
+            <Text style={styles.downloadModalNote}>
+              Keep the app open and your phone connected to WiFi for best results.
+            </Text>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -1581,6 +1664,102 @@ const styles = StyleSheet.create({
     backgroundColor: '#1a1a1a',
     borderLeftWidth: 1,
     borderLeftColor: '#333',
+  },
+  downloadModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.9)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  downloadModalContent: {
+    backgroundColor: '#2a2a2a',
+    borderRadius: 20,
+    padding: 30,
+    width: '100%',
+    maxWidth: 400,
+    borderWidth: 2,
+    borderColor: '#4CAF50',
+  },
+  downloadModalHeader: {
+    alignItems: 'center',
+    marginBottom: 30,
+  },
+  downloadModalTitle: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: '#fff',
+    marginTop: 12,
+  },
+  downloadProgressSection: {
+    alignItems: 'center',
+    marginBottom: 30,
+  },
+  downloadPercentage: {
+    fontSize: 48,
+    fontWeight: 'bold',
+    color: '#4CAF50',
+    marginBottom: 20,
+  },
+  progressBarContainer: {
+    width: '100%',
+    height: 12,
+    backgroundColor: '#1a1a1a',
+    borderRadius: 6,
+    overflow: 'hidden',
+    marginBottom: 30,
+  },
+  progressBarFill: {
+    height: '100%',
+    backgroundColor: '#4CAF50',
+    borderRadius: 6,
+  },
+  downloadStats: {
+    width: '100%',
+    gap: 12,
+  },
+  downloadStatItem: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  downloadStatLabel: {
+    fontSize: 14,
+    color: '#999',
+  },
+  downloadStatValue: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#fff',
+  },
+  downloadETA: {
+    fontSize: 13,
+    color: '#4CAF50',
+    marginTop: 16,
+    textAlign: 'center',
+  },
+  cancelDownloadButton: {
+    backgroundColor: '#1a1a1a',
+    padding: 16,
+    borderRadius: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    borderWidth: 1,
+    borderColor: '#f44336',
+    marginBottom: 16,
+  },
+  cancelDownloadButtonText: {
+    color: '#f44336',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  downloadModalNote: {
+    fontSize: 12,
+    color: '#666',
+    textAlign: 'center',
+    fontStyle: 'italic',
   },
 });
 
