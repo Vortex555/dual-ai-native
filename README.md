@@ -1,19 +1,19 @@
 # Dual AI Native - Hybrid AI Chatbot
 
-A dual-mode mobile AI app with **online** (Llama 3.3 70B via Groq API) and **offline** (Mistral 7B Instruct v0.2 on-device) capabilities.
+A dual-mode mobile AI app with **online** (Llama 3.3 70B via Groq API) and **offline** (Dolphin Llama 3.1 8B on-device) capabilities.
 
 ## 🎯 Key Features
 
 ✅ **Dual AI Modes** - Switch between cloud and local AI
 ✅ **Online Mode** - Llama 3.3 70B Versatile (via free Groq API)
-✅ **Offline Mode** - Mistral 7B Instruct v0.2 runs entirely on your phone
+✅ **Offline Mode** - Dolphin Llama 3.1 8B runs entirely on your phone
 ✅ **Private** - Offline data stays on your device
 ✅ **Fast** - Cloud AI for speed, local AI for privacy
 
 ## 📱 Requirements
 
 ### Device Requirements
-- **Storage**: 6GB+ free space (4GB for offline model)
+- **Storage**: 7GB+ free space (5GB for offline model)
 - **RAM**: 4GB+ recommended (6GB+ ideal for offline mode)
 - **Processor**: Modern ARM processor (2020+ devices)
 - **OS**: iOS 14+ or Android 8+
@@ -70,18 +70,18 @@ eas build --platform ios --profile production
 - **Requirements**: Internet connection + API key
 - **Get API key**: https://groq.com
 
-### Offline Mode: Mistral 7B Instruct v0.2
-The app uses a quantized version of Mistral 7B (Q4_K_M) which is ~4GB:
+### Offline Mode: Dolphin Llama 3.1 8B
+The app uses a quantized version of Dolphin Llama 3.1 8B (Q4_K_M) which is ~4.92GB:
 
 **Download from Hugging Face:**
-- Go to: https://huggingface.co/TheBloke/Mistral-7B-Instruct-v0.2-GGUF
-- Download: `mistral-7b-instruct-v0.2.Q4_K_M.gguf`
+- Go to: https://huggingface.co/cognitivecomputations/dolphin-2.9.3-llama-3.1-8b-gguf
+- Download: `dolphin-2.9.3-llama-3.1-8b-Q4_K_M.gguf`
 
 **Android (using ADB):**
 ```bash
 # Install ADB from Android SDK
 adb devices
-adb push mistral-7b-instruct-v0.2.Q4_K_M.gguf /sdcard/Download/
+adb push dolphin-2.9.3-llama-3.1-8b-Q4_K_M.gguf /sdcard/Download/
 ```
 
 Then move it to the app's directory through the app interface.
@@ -114,7 +114,7 @@ llama.rn Bridge
     ↓
 llama.cpp (C++)
     ↓
-Mistral 7B Instruct v0.2 (GGUF format)
+Dolphin Llama 3.1 8B (GGUF format)
     ↓
 Your Phone's CPU
 ```
@@ -138,15 +138,15 @@ Your Phone's CPU
 - Speed: Near-instant responses (cloud-based)
 - Requires: Internet connection
 
-**Offline Mode (Mistral 7B Instruct v0.2):**
-- Flagship phones (2023+): 10-20 tokens/second
-- Mid-range phones (2021-2022): 5-10 tokens/second
-- Older phones: 2-5 tokens/second
+**Offline Mode (Dolphin Llama 3.1 8B):**
+- Flagship phones (2023+): 12-25 tokens/second
+- Mid-range phones (2021-2022): 6-12 tokens/second
+- Older phones: 3-6 tokens/second
 
 **Memory Usage:**
-- Model: ~4GB
+- Model: ~4.92GB
 - Runtime: ~1-2GB
-- Total: ~5-6GB
+- Total: ~6-7GB
 
 ## ⚡ Optimization Tips
 

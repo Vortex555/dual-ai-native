@@ -10,12 +10,12 @@ export class ModelDownloader {
 
   // Alternative download URLs (in case primary fails)
   static MODEL_URLS = {
-    primary: 'https://huggingface.co/TheBloke/Mistral-7B-Instruct-v0.2-GGUF/resolve/main/mistral-7b-instruct-v0.2.Q4_K_M.gguf',
-    mirror1: 'https://huggingface.co/TheBloke/Mistral-7B-Instruct-v0.2-GGUF/resolve/main/mistral-7b-instruct-v0.2.Q4_K_M.gguf',
+    primary: 'https://huggingface.co/cognitivecomputations/dolphin-2.9.3-llama-3.1-8b-gguf/resolve/main/dolphin-2.9.3-llama-3.1-8b-Q4_K_M.gguf',
+    mirror1: 'https://huggingface.co/cognitivecomputations/dolphin-2.9.3-llama-3.1-8b-gguf/resolve/main/dolphin-2.9.3-llama-3.1-8b-Q4_K_M.gguf',
     // Add more mirrors as needed
   };
 
-  static MODEL_SIZE = 4.08 * 1024 * 1024 * 1024; // 4.08 GB in bytes
+  static MODEL_SIZE = 4.92 * 1024 * 1024 * 1024; // 4.92 GB in bytes
 
   async checkStorageSpace() {
     try {
@@ -35,7 +35,7 @@ export class ModelDownloader {
 
   async downloadModel(progressCallback, useAlternative = false) {
     const modelUrl = useAlternative ? ModelDownloader.MODEL_URLS.mirror1 : ModelDownloader.MODEL_URLS.primary;
-    const modelPath = `${FileSystem.documentDirectory}mistral-7b-instruct-q4.gguf`;
+    const modelPath = `${FileSystem.documentDirectory}dolphin-llama-3.1-8b-q4.gguf`;
 
     try {
       // Check if file already exists

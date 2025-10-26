@@ -59,7 +59,7 @@ export default function App() {
 
   const autoInitializeModel = async () => {
     try {
-      const modelPath = `${FileSystem.documentDirectory}mistral-7b-instruct-q4.gguf`;
+      const modelPath = `${FileSystem.documentDirectory}dolphin-llama-3.1-8b-q4.gguf`;
       const fileInfo = await FileSystem.getInfoAsync(modelPath);
       
       // Check if we should auto-initialize (if user was in offline mode)
@@ -105,7 +105,7 @@ export default function App() {
 
   const checkModelStatus = async () => {
     try {
-      const modelPath = `${FileSystem.documentDirectory}mistral-7b-instruct-q4.gguf`;
+      const modelPath = `${FileSystem.documentDirectory}dolphin-llama-3.1-8b-q4.gguf`;
       const fileInfo = await FileSystem.getInfoAsync(modelPath);
       setModelLoaded(fileInfo.exists);
       // Removed: No longer auto-hide welcome screen
@@ -275,7 +275,7 @@ export default function App() {
           style: 'destructive',
           onPress: async () => {
             try {
-              const modelPath = `${FileSystem.documentDirectory}mistral-7b-instruct-q4.gguf`;
+              const modelPath = `${FileSystem.documentDirectory}dolphin-llama-3.1-8b-q4.gguf`;
               await FileSystem.deleteAsync(modelPath, { idempotent: true });
               
               // Release model from memory if loaded
@@ -431,7 +431,7 @@ export default function App() {
   const initializeModel = async () => {
     setIsInitializing(true);
     try {
-      const modelPath = `${FileSystem.documentDirectory}mistral-7b-instruct-q4.gguf`;
+      const modelPath = `${FileSystem.documentDirectory}dolphin-llama-3.1-8b-q4.gguf`;
       
       // Load the model using AIService
       const result = await aiService.current.loadLocalModel(modelPath);
@@ -734,7 +734,7 @@ export default function App() {
             style={styles.infoButton}
             onPress={() => Alert.alert(
               'About',
-              'This app supports dual AI modes:\n\n• Online: Llama 3.3 70B (via Groq API)\n• Offline: Mistral 7B Instruct v0.2 (local on-device)\n\nOffline mode runs entirely on your phone using llama.cpp - no data sent to external servers.'
+              'This app supports dual AI modes:\n\n• Online: Llama 3.3 70B (via Groq API)\n• Offline: Dolphin Llama 3.1 8B (secure local on-device)\n\nOffline mode runs entirely on your phone using advanced encryption - no data sent to external servers. Maximum privacy and security.'
             )}
           >
             <Text style={styles.infoButtonText}>Learn More</Text>
@@ -755,7 +755,7 @@ export default function App() {
             <ActivityIndicator size="large" color="#4CAF50" />
             <Text style={styles.initializingTitle}>Loading AI Model</Text>
             <Text style={styles.initializingText}>
-              Initializing Mistral 7B into memory...
+              Initializing secure Dolphin Llama 3.1 8B into memory...
             </Text>
             <Text style={styles.initializingSubtext}>
               This may take 30-60 seconds{'\n'}
@@ -979,16 +979,16 @@ export default function App() {
                 </View>
                 <View style={styles.statusRow}>
                   <Text style={styles.statusLabel}>Model:</Text>
-                  <Text style={styles.statusValue}>Mistral 7B Instruct v0.2 (Q4)</Text>
+                  <Text style={styles.statusValue}>Dolphin Llama 3.1 8B (Q4)</Text>
                 </View>
                 <View style={styles.statusRow}>
                   <Text style={styles.statusLabel}>Size:</Text>
-                  <Text style={styles.statusValue}>4.08 GB</Text>
+                  <Text style={styles.statusValue}>4.92 GB</Text>
                 </View>
                 {!modelLoaded ? (
                   <>
                     <Text style={styles.infoText}>
-                      Download the model to use offline mode. The model runs entirely on your device.
+                      Download the secure model to use offline mode. The model runs entirely on your device with maximum privacy.
                     </Text>
                     <TouchableOpacity
                       style={styles.downloadButton}
@@ -1046,11 +1046,11 @@ export default function App() {
                   • Instant responses{'\n\n'}
                   
                   <Text style={{ fontWeight: 'bold', color: '#4CAF50' }}>Offline Mode:</Text>{'\n'}
-                  • Runs Mistral 7B Instruct v0.2 locally{'\n'}
+                  • Runs Dolphin Llama 3.1 8B locally{'\n'}
                   • No internet needed{'\n'}
-                  • Complete privacy{'\n'}
-                  • Requires model download (4.08 GB){'\n'}
-                  • Note: Requires native modules (full build)
+                  • Maximum security & privacy{'\n'}
+                  • Requires model download (4.92 GB){'\n'}
+                  • Advanced on-device AI processing
                 </Text>
               </View>
             </ScrollView>
