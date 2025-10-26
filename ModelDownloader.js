@@ -35,7 +35,7 @@ export class ModelDownloader {
 
   async downloadModel(progressCallback, useAlternative = false) {
     const modelUrl = useAlternative ? ModelDownloader.MODEL_URLS.mirror1 : ModelDownloader.MODEL_URLS.primary;
-        const modelPath = `${RNFS.DocumentDirectoryPath}/dolphin-x1-8b-q8.gguf`;
+    const modelPath = `${FileSystem.documentDirectory}dolphin-x1-8b-q8.gguf`;
 
     try {
       // Check if file already exists
