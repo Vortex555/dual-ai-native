@@ -521,24 +521,27 @@ export default function App() {
         }
       );
       
+      // Ensure we have a valid response text
+      const finalText = result?.text || 'Error: No response generated. Please try again.';
+      
       // Update with final text (in case streaming didn't work)
       setMessages(prev => {
         const newMessages = [...prev];
         const lastMsg = newMessages[newMessages.length - 1];
         if (lastMsg.id === aiMessageId) {
-          lastMsg.text = result.text;
-          lastMsg.mode = result.mode;
+          lastMsg.text = finalText;
+          lastMsg.mode = result?.mode || aiMode;
         }
         return newMessages;
       });
 
       // Save final messages
       await saveMessages(messagesWithPlaceholder.map(msg => 
-        msg.id === aiMessageId ? { ...msg, text: result.text, mode: result.mode } : msg
+        msg.id === aiMessageId ? { ...msg, text: finalText, mode: result?.mode || aiMode } : msg
       ));
       
       // Show warning if in demo mode
-      if (result.mode === 'demo' || result.mode === 'offline-demo') {
+      if (result?.mode === 'demo' || result?.mode === 'offline-demo') {
         Alert.alert(
           'Demo Mode',
           result.error || 'Add an API key in settings for real AI responses.',
@@ -549,9 +552,26 @@ export default function App() {
         );
       }
       
+      // Show error if generation failed
+      if (!result?.success && result?.error) {
+        console.error('AI generation error:', result.error);
+      }
+      
     } catch (error) {
-      console.error('Error:', error);
-      Alert.alert('Error', 'Failed to generate response. Please check your settings.');
+      console.error('Error generating response:', error);
+      
+      // Update the AI message with error text
+      setMessages(prev => {
+        const newMessages = [...prev];
+        const lastMsg = newMessages[newMessages.length - 1];
+        if (lastMsg.id === aiMessageId) {
+          lastMsg.text = `Error: ${error.message || 'Failed to generate response. Please try again.'}`;
+          lastMsg.mode = aiMode;
+        }
+        return newMessages;
+      });
+      
+      Alert.alert('Error', `Failed to generate response: ${error.message || 'Unknown error'}`);
     } finally {
       setIsLoading(false);
     }
