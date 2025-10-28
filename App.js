@@ -42,6 +42,7 @@ export default function App() {
   const [currentSessionId, setCurrentSessionId] = useState(null);
   const [aiMode, setAiMode] = useState('online'); // 'online' or 'offline'
   const [apiKey, setApiKey] = useState('');
+  const [performanceMode, setPerformanceMode] = useState('uncensored'); // 'fast', 'balanced', or 'uncensored'
   const scrollViewRef = useRef();
   const modelDownloader = useRef(new ModelDownloader());
   const aiService = useRef(new AIService());
@@ -130,11 +131,16 @@ export default function App() {
     try {
       const savedMode = await AsyncStorage.getItem('ai_mode');
       const savedApiKey = await AsyncStorage.getItem('api_key');
+      const savedPerfMode = await AsyncStorage.getItem('performance_mode');
       
       if (savedMode) setAiMode(savedMode);
       if (savedApiKey) {
         setApiKey(savedApiKey);
         aiService.current.setApiKey(savedApiKey);
+      }
+      if (savedPerfMode) {
+        setPerformanceMode(savedPerfMode);
+        aiService.current.setPerformanceMode(savedPerfMode);
       }
       
       aiService.current.setMode(savedMode || 'online');
@@ -156,6 +162,17 @@ export default function App() {
       aiService.current.setMode(mode);
     } catch (error) {
       console.error('Error saving settings:', error);
+    }
+  };
+
+  const savePerformanceMode = async (mode) => {
+    try {
+      await AsyncStorage.setItem('performance_mode', mode);
+      setPerformanceMode(mode);
+      aiService.current.setPerformanceMode(mode);
+      console.log('Performance mode saved:', mode);
+    } catch (error) {
+      console.error('Error saving performance mode:', error);
     }
   };
 
@@ -1055,6 +1072,70 @@ export default function App() {
                 )}
               </View>
 
+              {/* Performance Mode (for Offline Mode) */}
+              {aiMode === 'offline' && (
+                <View style={styles.settingSection}>
+                  <Text style={styles.sectionTitle}>Performance Mode</Text>
+                  <Text style={styles.sectionDesc}>
+                    Choose between speed and quality. Default is Uncensored.
+                  </Text>
+
+                  <TouchableOpacity
+                    style={[styles.perfModeOption, performanceMode === 'fast' && styles.perfModeOptionActive]}
+                    onPress={() => savePerformanceMode('fast')}
+                  >
+                    <View style={styles.perfModeOptionLeft}>
+                      <Ionicons name="flash" size={24} color={performanceMode === 'fast' ? '#FF9800' : '#999'} />
+                      <View style={styles.perfModeOptionText}>
+                        <Text style={[styles.perfModeOptionTitle, performanceMode === 'fast' && styles.perfModeOptionTitleActive]}>
+                          Fast
+                        </Text>
+                        <Text style={styles.perfModeOptionDesc}>
+                          Quick, concise responses (~10-15 sec)
+                        </Text>
+                      </View>
+                    </View>
+                    {performanceMode === 'fast' && <Ionicons name="checkmark-circle" size={24} color="#FF9800" />}
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={[styles.perfModeOption, performanceMode === 'balanced' && styles.perfModeOptionActive]}
+                    onPress={() => savePerformanceMode('balanced')}
+                  >
+                    <View style={styles.perfModeOptionLeft}>
+                      <Ionicons name="scale" size={24} color={performanceMode === 'balanced' ? '#2196F3' : '#999'} />
+                      <View style={styles.perfModeOptionText}>
+                        <Text style={[styles.perfModeOptionTitle, performanceMode === 'balanced' && styles.perfModeOptionTitleActive]}>
+                          Balanced
+                        </Text>
+                        <Text style={styles.perfModeOptionDesc}>
+                          Helpful, detailed responses (~20-40 sec)
+                        </Text>
+                      </View>
+                    </View>
+                    {performanceMode === 'balanced' && <Ionicons name="checkmark-circle" size={24} color="#2196F3" />}
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={[styles.perfModeOption, performanceMode === 'uncensored' && styles.perfModeOptionActive]}
+                    onPress={() => savePerformanceMode('uncensored')}
+                  >
+                    <View style={styles.perfModeOptionLeft}>
+                      <Ionicons name="infinite" size={24} color={performanceMode === 'uncensored' ? '#9C27B0' : '#999'} />
+                      <View style={styles.perfModeOptionText}>
+                        <Text style={[styles.perfModeOptionTitle, performanceMode === 'uncensored' && styles.perfModeOptionTitleActive]}>
+                          Uncensored
+                        </Text>
+                        <Text style={styles.perfModeOptionDesc}>
+                          Maximum freedom, long responses (~45-90 sec)
+                        </Text>
+                      </View>
+                    </View>
+                    {performanceMode === 'uncensored' && <Ionicons name="checkmark-circle" size={24} color="#9C27B0" />}
+                  </TouchableOpacity>
+                </View>
+              )}
+
               {/* About Section */}
               <View style={styles.settingSection}>
                 <Text style={styles.sectionTitle}>About</Text>
@@ -1620,6 +1701,43 @@ const styles = StyleSheet.create({
     color: '#007AFF',
   },
   modeOptionDesc: {
+    fontSize: 13,
+    color: '#999',
+  },
+  perfModeOption: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    backgroundColor: '#2a2a2a',
+    padding: 16,
+    borderRadius: 12,
+    marginBottom: 12,
+    borderWidth: 2,
+    borderColor: 'transparent',
+  },
+  perfModeOptionActive: {
+    borderColor: '#007AFF',
+    backgroundColor: '#1a2a3a',
+  },
+  perfModeOptionLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    flex: 1,
+  },
+  perfModeOptionText: {
+    flex: 1,
+  },
+  perfModeOptionTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#fff',
+    marginBottom: 4,
+  },
+  perfModeOptionTitleActive: {
+    color: '#007AFF',
+  },
+  perfModeOptionDesc: {
     fontSize: 13,
     color: '#999',
   },
