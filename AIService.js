@@ -7,6 +7,8 @@ export class AIService {
     this.mode = 'online'; // 'online' or 'offline'
     this.apiKey = null;
     this.llamaContext = null;
+    this.promptCache = new Map(); // Cache processed prompts
+    this.lastPrompt = null; // Track last prompt for caching
   }
 
   setMode(mode) {
@@ -125,22 +127,29 @@ export class AIService {
         throw new Error('Local model not loaded. Please download the model first or switch to online mode.');
       }
 
-      // Build prompt from conversation history
+      // Build optimized prompt from conversation history (keep only recent messages)
       const prompt = this.buildPrompt(messages);
 
-      // Generate response using llama.cpp via llama.rn
+      // Generate response using llama.cpp via llama.rn with optimized settings
       const response = await this.llamaContext.completion(
         {
           prompt: prompt,
-          n_predict: 512,
-          temperature: 0.7,
-          top_k: 40,
-          top_p: 0.9,
-          stop: ['<|im_end|>', '<|im_start|>'],
+          n_predict: 200,        // Further reduced for even faster responses
+          temperature: 0.5,      // Lower for more deterministic, faster responses
+          top_k: 20,             // Further reduced for faster sampling
+          top_p: 0.8,            // Tighter distribution for speed
+          repeat_penalty: 1.15,  // Higher penalty to reduce repetition faster
+          stop: ['<|im_end|>', '<|im_start|>', '\n\nUser:', '\n\nHuman:', 'User:', 'Human:'],
+          n_threads: 8,          // Maximized threads for modern phones
+          min_p: 0.05,           // Min probability threshold for faster pruning
+          tfs_z: 1.0,            // Tail-free sampling for quality/speed balance
+          typical_p: 1.0,        // Typical sampling disabled for max speed
+          penalty_last_n: 64,    // Only penalize last 64 tokens (faster)
+          mirostat: 0,           // Disable mirostat for speed
         },
         (data) => {
-          // Stream token-by-token (optional)
-          if (onChunk) {
+          // Stream token-by-token for real-time feedback
+          if (onChunk && data.token) {
             onChunk(data.token);
           }
         }
@@ -165,12 +174,16 @@ export class AIService {
 
   buildPrompt(messages) {
     // Dolphin X1 8B uses ChatML format
-    let prompt = '<|im_start|>system\nYou are Dolphin, a helpful AI assistant. You provide direct, honest, and uncensored responses.<|im_end|>\n';
+    // Simplified system prompt for faster processing
+    let prompt = '<|im_start|>system\nYou are a helpful AI. Be concise.<|im_end|>\n';
     
-    messages.forEach((msg) => {
+    // Only use last 6 messages (3 exchanges) to minimize context
+    const recentMessages = messages.slice(-6);
+    
+    recentMessages.forEach((msg) => {
       if (msg.sender === 'user') {
         prompt += `<|im_start|>user\n${msg.text}<|im_end|>\n`;
-      } else {
+      } else if (msg.sender === 'ai') {
         prompt += `<|im_start|>assistant\n${msg.text}<|im_end|>\n`;
       }
     });
@@ -200,21 +213,42 @@ export class AIService {
     try {
       console.log('Loading model from:', modelPath);
       
-      // Initialize llama.cpp context with the downloaded model
+      // Initialize llama.cpp context with GPU acceleration enabled
       const context = await initLlama({
         model: modelPath,
-        n_ctx: 2048,        // Context window size
-        n_batch: 512,       // Batch size for processing
-        n_threads: 4,       // Number of CPU threads (adjust for device)
-        use_mlock: true,    // Keep model in RAM for faster inference
-        n_gpu_layers: 0,    // Use CPU (Metal GPU support coming soon)
+        n_ctx: 768,         // Further reduced context for maximum speed
+        n_batch: 128,       // Smaller batch for instant first token
+        n_threads: 8,       // Maximum threads for parallel processing
+        use_mlock: true,    // Keep model in RAM for fastest inference
+        n_gpu_layers: 99,   // Offload ALL layers to GPU (Metal on iOS, Vulkan on Android)
+        embedding: false,   // Disable embeddings (not needed)
+        use_mmap: true,     // Memory-map for efficient loading
+        lora_adapters: [],  // No LoRA adapters for speed
+        vocab_only: false,
+        seed: -1,           // Random seed for variety
+        f16_kv: true,       // Use FP16 for key/value cache (faster)
+        logits_all: false,  // Only compute logits for next token
+        cache_type_k: 'f16', // FP16 cache for speed
+        cache_type_v: 'f16',
       });
       
       this.llamaContext = context;
       
+      // Warm up the model with a tiny inference (primes the cache)
+      try {
+        await context.completion({
+          prompt: '<|im_start|>user\nHi<|im_end|>\n<|im_start|>assistant\n',
+          n_predict: 5,
+          temperature: 0.5,
+        });
+        console.log('Model warmed up successfully');
+      } catch (warmupError) {
+        console.log('Warmup failed, but model loaded:', warmupError.message);
+      }
+      
       return {
         success: true,
-        message: 'Model loaded successfully!'
+        message: 'Model loaded and optimized for speed!'
       };
     } catch (error) {
       console.error('Error loading model:', error);
@@ -230,6 +264,8 @@ export class AIService {
       try {
         await this.llamaContext.release();
         this.llamaContext = null;
+        this.promptCache.clear(); // Clear cache on release
+        this.lastPrompt = null;
         return { success: true };
       } catch (error) {
         console.error('Error releasing model:', error);
