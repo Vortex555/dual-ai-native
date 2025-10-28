@@ -6,7 +6,17 @@
     "orientation": "portrait",
     "userInterfaceStyle": "automatic",
     "plugins": [
-      "llama.rn"
+      [
+        "llama.rn",
+        {
+          "ios": {
+            "useGPU": true
+          },
+          "android": {
+            "useGPU": true
+          }
+        }
+      ]
     ],
     "ios": {
       "supportsTablet": true,

@@ -612,6 +612,8 @@ export default function App() {
 
   const renderMessage = (message) => {
     const isUser = message.sender === 'user';
+    // Remove any trailing cursor characters (|, █, ▌, etc.)
+    const cleanText = message.text.replace(/[|█▌▐▀▄]$/g, '').trim();
     return (
       <View
         key={message.id}
@@ -620,7 +622,7 @@ export default function App() {
           isUser ? styles.userMessage : styles.aiMessage,
         ]}
       >
-        <Text style={styles.messageText}>{message.text}</Text>
+        <Text style={styles.messageText}>{cleanText}</Text>
         <Text style={styles.timestamp}>{message.timestamp}</Text>
       </View>
     );
