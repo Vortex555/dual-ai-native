@@ -309,42 +309,32 @@ export class AIService {
       // Get performance settings for context window size
       const perfSettings = this.getPerformanceSettings();
       
-      // Initialize llama.cpp context with performance-based settings
+      // Initialize llama.cpp context with mobile-optimized settings
       const context = await initLlama({
         model: modelPath,
         n_ctx: perfSettings.n_ctx,  // Dynamic context window based on performance mode
-        n_batch: 256,       // Balanced batch size
-        n_threads: 8,       // Maximum threads for parallel processing
-        use_mlock: true,    // Keep model in RAM for fastest inference
-        n_gpu_layers: 99,   // Offload ALL layers to GPU (Metal on iOS, Vulkan on Android)
+        n_batch: 128,       // Reduced batch size for mobile stability
+        n_threads: 6,       // Reduced threads (iPhone 16 Pro has 6 performance cores)
+        use_mlock: false,   // CRITICAL: Don't lock memory on mobile - let OS manage
+        n_gpu_layers: 99,   // Offload ALL layers to GPU (Metal on iOS)
         embedding: false,   // Disable embeddings (not needed)
         use_mmap: true,     // Memory-map for efficient loading
         lora_adapters: [],  // No LoRA adapters
         vocab_only: false,
         seed: -1,           // Random seed for variety
-        f16_kv: true,       // Use FP16 for key/value cache
+        f16_kv: true,       // Use FP16 for key/value cache (saves memory)
         logits_all: false,  // Only compute logits for next token
-        cache_type_k: 'f16', // FP16 cache
+        cache_type_k: 'f16', // FP16 cache (saves memory)
         cache_type_v: 'f16',
       });
       
       this.llamaContext = context;
       
-      // Warm up the model with a tiny inference (primes the cache)
-      try {
-        await context.completion({
-          prompt: '<|im_start|>user\nHi<|im_end|>\n<|im_start|>assistant\n',
-          n_predict: 5,
-          temperature: 0.5,
-        });
-        console.log('Model warmed up successfully');
-      } catch (warmupError) {
-        console.log('Warmup failed, but model loaded:', warmupError.message);
-      }
+      console.log('Model loaded successfully! Skipping warmup to save memory.');
       
       return {
         success: true,
-        message: 'Model loaded and optimized for speed!'
+        message: 'Model loaded successfully!'
       };
     } catch (error) {
       console.error('Error loading model:', error);

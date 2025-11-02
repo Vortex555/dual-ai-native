@@ -450,8 +450,18 @@ export default function App() {
     try {
       const modelPath = `${FileSystem.documentDirectory}dolphin-x1-8b-q4.gguf`;
       
-      // Load the model using AIService
-      const result = await aiService.current.loadLocalModel(modelPath);
+      console.log('Starting model initialization...');
+      
+      // Add a small delay to let UI settle
+      await new Promise(resolve => setTimeout(resolve, 500));
+      
+      // Load the model using AIService with timeout
+      const loadPromise = aiService.current.loadLocalModel(modelPath);
+      const timeoutPromise = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('Model loading timeout (60s)')), 60000)
+      );
+      
+      const result = await Promise.race([loadPromise, timeoutPromise]);
       
       if (result.success) {
         setModelLoaded(true);
@@ -464,9 +474,19 @@ export default function App() {
     } catch (error) {
       console.error('Model initialization error:', error);
       setModelInitialized(false);
+      
+      let errorMessage = error.message || 'Unknown error';
+      let suggestions = '• Restart the app\n• Re-download the model\n• Close other apps to free memory';
+      
+      if (errorMessage.includes('timeout')) {
+        suggestions = '• Your device may be low on memory\n• Close other apps\n• Try Fast mode instead of Uncensored';
+      } else if (errorMessage.includes('memory') || errorMessage.includes('allocation')) {
+        suggestions = '• Close other apps to free up RAM\n• Try restarting your device\n• Use Fast mode for lower memory usage';
+      }
+      
       Alert.alert(
         'Error Loading Model', 
-        `${error.message}\n\nTry:\n• Restarting the app\n• Re-downloading the model\n• Closing other apps to free memory`
+        `${errorMessage}\n\nTry:\n${suggestions}`
       );
     } finally {
       setIsInitializing(false);
