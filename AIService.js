@@ -10,10 +10,25 @@ export class AIService {
     this.promptCache = new Map(); // Cache processed prompts
     this.lastPrompt = null; // Track last prompt for caching
     this.performanceMode = 'uncensored'; // 'fast', 'balanced', or 'uncensored' (default)
+    this.shouldStop = false; // Flag to stop generation
   }
 
   setMode(mode) {
     this.mode = mode;
+  }
+
+  stopGeneration() {
+    this.shouldStop = true;
+    console.log('Stop generation requested');
+    
+    // If using llama.rn context, try to stop it
+    if (this.llamaContext && this.llamaContext.stopCompletion) {
+      try {
+        this.llamaContext.stopCompletion();
+      } catch (error) {
+        console.log('Context stop not available:', error.message);
+      }
+    }
   }
 
   setPerformanceMode(perfMode) {
@@ -177,6 +192,9 @@ export class AIService {
   // Offline mode using local model
   async generateOffline(messages, onChunk) {
     try {
+      // Reset stop flag
+      this.shouldStop = false;
+      
       // Check if model is loaded
       if (!this.llamaContext) {
         throw new Error('Local model not loaded. Please download the model first or switch to online mode.');

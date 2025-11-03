@@ -28,6 +28,7 @@ export default function App() {
   const [messages, setMessages] = useState([]);
   const [inputText, setInputText] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [isGenerating, setIsGenerating] = useState(false);
   const [modelLoaded, setModelLoaded] = useState(false);
   const [modelInitialized, setModelInitialized] = useState(false);
   const [isInitializing, setIsInitializing] = useState(false);
@@ -493,6 +494,28 @@ export default function App() {
     }
   };
 
+  const stopGeneration = () => {
+    if (isLoading && aiService.current) {
+      aiService.current.stopGeneration();
+      setIsLoading(false);
+      setIsGenerating(false);
+      
+      // Update the last AI message to indicate it was stopped
+      setMessages(prev => {
+        const newMessages = [...prev];
+        const lastMsg = newMessages[newMessages.length - 1];
+        if (lastMsg && lastMsg.sender === 'ai') {
+          if (!lastMsg.text || lastMsg.text.trim() === '') {
+            lastMsg.text = '[Generation stopped by user]';
+          } else {
+            lastMsg.text += '\n\n[Stopped by user]';
+          }
+        }
+        return newMessages;
+      });
+    }
+  };
+
   const sendMessage = async () => {
     if (!inputText.trim() || isLoading) return;
 
@@ -526,6 +549,7 @@ export default function App() {
     setMessages(updatedMessages);
     setInputText('');
     setIsLoading(true);
+    setIsGenerating(true);
 
     // Create a placeholder AI message for streaming
     const aiMessageId = (Date.now() + 1).toString();
@@ -611,6 +635,7 @@ export default function App() {
       Alert.alert('Error', `Failed to generate response: ${error.message || 'Unknown error'}`);
     } finally {
       setIsLoading(false);
+      setIsGenerating(false);
     }
   };
 
@@ -896,17 +921,30 @@ export default function App() {
             maxLength={1000}
             editable={!isLoading && !isInitializing && (aiMode === 'online' || modelInitialized)}
           />
-          <TouchableOpacity
-            style={[styles.sendButton, (!inputText.trim() || isLoading || isInitializing || (aiMode === 'offline' && !modelInitialized)) && styles.sendButtonDisabled]}
-            onPress={sendMessage}
-            disabled={!inputText.trim() || isLoading || isInitializing || (aiMode === 'offline' && !modelInitialized)}
-          >
-            <Ionicons
-              name={isLoading ? 'hourglass-outline' : 'send'}
-              size={24}
-              color="#fff"
-            />
-          </TouchableOpacity>
+          {isLoading ? (
+            <TouchableOpacity
+              style={[styles.sendButton, styles.stopButton]}
+              onPress={stopGeneration}
+            >
+              <Ionicons
+                name="stop-circle"
+                size={24}
+                color="#fff"
+              />
+            </TouchableOpacity>
+          ) : (
+            <TouchableOpacity
+              style={[styles.sendButton, (!inputText.trim() || isInitializing || (aiMode === 'offline' && !modelInitialized)) && styles.sendButtonDisabled]}
+              onPress={sendMessage}
+              disabled={!inputText.trim() || isInitializing || (aiMode === 'offline' && !modelInitialized)}
+            >
+              <Ionicons
+                name="send"
+                size={24}
+                color="#fff"
+              />
+            </TouchableOpacity>
+          )}
         </View>
       </KeyboardAvoidingView>
 
@@ -1641,6 +1679,9 @@ const styles = StyleSheet.create({
   sendButtonDisabled: {
     backgroundColor: '#555',
     opacity: 0.5,
+  },
+  stopButton: {
+    backgroundColor: '#FF3B30',
   },
   // Settings Modal Styles
   modalOverlay: {
