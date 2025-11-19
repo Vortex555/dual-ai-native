@@ -217,7 +217,7 @@ export class AIService {
           top_k: perfSettings.top_k,
           top_p: perfSettings.top_p,
           repeat_penalty: perfSettings.repeat_penalty,
-          stop: ['<|im_end|>', '<|im_start|>'],
+          stop: ['<|im_end|>', '<|im_start|>', '|im_end|', '|im_start|', '<|endoftext|>'],
           n_threads: 6,          // Match iPhone 16 Pro's 6 performance cores
           min_p: perfSettings.min_p,
           tfs_z: 1.0,            // Tail-free sampling for natural flow
@@ -245,6 +245,17 @@ export class AIService {
       
       // Remove any self-censoring phrases from the response
       let cleanedText = response.text.trim();
+      
+      // Remove ChatML format tokens that sometimes leak through
+      cleanedText = cleanedText.replace(/<\|im_start\|>/gi, '');
+      cleanedText = cleanedText.replace(/<\|im_end\|>/gi, '');
+      cleanedText = cleanedText.replace(/\|im_start\|/gi, '');
+      cleanedText = cleanedText.replace(/\|im_end\|/gi, '');
+      cleanedText = cleanedText.replace(/<\|im_sep\|>/gi, '');
+      cleanedText = cleanedText.replace(/\|im_sep\|/gi, '');
+      
+      // Remove any trailing special tokens
+      cleanedText = cleanedText.replace(/\s*<\|.*?\|>\s*$/g, '').trim();
       
       // Remove common self-censoring patterns
       const censorPatterns = [
