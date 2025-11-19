@@ -191,6 +191,8 @@ export class AIService {
 
   // Offline mode using local model
   async generateOffline(messages, onChunk) {
+    let safetyTimeout = null;
+    
     try {
       // Reset stop flag
       this.shouldStop = false;
@@ -208,40 +210,85 @@ export class AIService {
 
       console.log(`Generating with ${this.performanceMode} mode: ${perfSettings.n_predict} tokens, ${perfSettings.n_ctx} context`);
 
-      // Generate response with timeout protection
-      const generationPromise = this.llamaContext.completion(
-        {
-          prompt: prompt,
-          n_predict: perfSettings.n_predict,
-          temperature: perfSettings.temperature,
-          top_k: perfSettings.top_k,
-          top_p: perfSettings.top_p,
-          repeat_penalty: perfSettings.repeat_penalty,
-          stop: ['<|im_end|>', '<|im_start|>', '|im_end|', '|im_start|', '<|endoftext|>'],
-          n_threads: 6,          // Match iPhone 16 Pro's 6 performance cores
-          min_p: perfSettings.min_p,
-          tfs_z: 1.0,            // Tail-free sampling for natural flow
-          typical_p: perfSettings.typical_p,
-          penalty_last_n: perfSettings.penalty_last_n,
-          mirostat: 0,           // Disabled - no artificial safety steering
-          presence_penalty: 0.0, // No presence penalty - say what needs to be said
-          frequency_penalty: 0.0,// No frequency penalty - don't avoid certain words
-        },
-        (data) => {
-          // Stream token-by-token for real-time feedback
-          if (onChunk && data.token) {
-            onChunk(data.token);
+      // Wrap generation in try-catch for crash protection
+      let generationPromise;
+      try {
+        generationPromise = this.llamaContext.completion(
+          {
+            prompt: prompt,
+            n_predict: perfSettings.n_predict,
+            temperature: perfSettings.temperature,
+            top_k: perfSettings.top_k,
+            top_p: perfSettings.top_p,
+            repeat_penalty: perfSettings.repeat_penalty,
+            stop: ['<|im_end|>', '<|im_start|>', '|im_end|', '|im_start|', '<|endoftext|>'],
+            n_threads: 6,          // Match iPhone 16 Pro's 6 performance cores
+            min_p: perfSettings.min_p,
+            tfs_z: 1.0,            // Tail-free sampling for natural flow
+            typical_p: perfSettings.typical_p,
+            penalty_last_n: perfSettings.penalty_last_n,
+            mirostat: 0,           // Disabled - no artificial safety steering
+            presence_penalty: 0.0, // No presence penalty - say what needs to be said
+            frequency_penalty: 0.0,// No frequency penalty - don't avoid certain words
+          },
+          (data) => {
+            try {
+              // Stream token-by-token for real-time feedback with error protection
+              if (onChunk && data.token && !this.shouldStop) {
+                onChunk(data.token);
+              }
+            } catch (chunkError) {
+              console.error('Error in chunk callback:', chunkError);
+              // Don't throw, just log - continue generation
+            }
           }
-        }
-      );
+        );
+      } catch (completionError) {
+        console.error('Error starting completion:', completionError);
+        throw new Error(`Failed to start generation: ${completionError.message}`);
+      }
 
       // Add timeout (2 minutes for uncensored, less for others)
       const timeoutMs = this.performanceMode === 'uncensored' ? 120000 : 60000;
-      const timeoutPromise = new Promise((_, reject) =>
-        setTimeout(() => reject(new Error('Generation timeout - try Fast mode or shorter prompts')), timeoutMs)
-      );
+      const timeoutPromise = new Promise((_, reject) => {
+        safetyTimeout = setTimeout(() => {
+          console.log('Generation timeout reached');
+          reject(new Error('Generation timeout - try Fast mode or shorter prompts'));
+        }, timeoutMs);
+      });
 
-      const response = await Promise.race([generationPromise, timeoutPromise]);
+      // Add crash protection promise
+      const crashProtection = new Promise((resolve, reject) => {
+        setTimeout(() => {
+          reject(new Error('Safety timeout - generation took too long'));
+        }, timeoutMs + 5000); // 5 seconds after main timeout
+      });
+
+      let response;
+      try {
+        response = await Promise.race([generationPromise, timeoutPromise, crashProtection]);
+      } catch (raceError) {
+        console.error('Error during generation:', raceError);
+        // Try to stop the context
+        if (this.llamaContext && this.llamaContext.stopCompletion) {
+          try {
+            await this.llamaContext.stopCompletion();
+          } catch (stopError) {
+            console.log('Could not stop completion:', stopError);
+          }
+        }
+        throw raceError;
+      } finally {
+        // Clear timeout
+        if (safetyTimeout) {
+          clearTimeout(safetyTimeout);
+        }
+      }
+      
+      // Validate response
+      if (!response || typeof response.text !== 'string') {
+        throw new Error('Invalid response from model');
+      }
       
       // Remove any self-censoring phrases from the response
       let cleanedText = response.text.trim();

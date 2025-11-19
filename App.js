@@ -566,21 +566,45 @@ export default function App() {
     setMessages(messagesWithPlaceholder);
 
     try {
-      // Use AI Service to generate response with streaming
-      const result = await aiService.current.generateResponse(
-        updatedMessages,
-        (chunk) => {
-          // Update the AI message in real-time as chunks arrive
-          setMessages(prev => {
-            const newMessages = [...prev];
-            const lastMsg = newMessages[newMessages.length - 1];
-            if (lastMsg.id === aiMessageId) {
-              lastMsg.text += chunk;
+      // Use AI Service to generate response with streaming and crash protection
+      let result;
+      try {
+        result = await Promise.race([
+          aiService.current.generateResponse(
+            updatedMessages,
+            (chunk) => {
+              try {
+                // Update the AI message in real-time as chunks arrive with error protection
+                setMessages(prev => {
+                  const newMessages = [...prev];
+                  const lastMsg = newMessages[newMessages.length - 1];
+                  if (lastMsg && lastMsg.id === aiMessageId) {
+                    lastMsg.text += chunk;
+                  }
+                  return newMessages;
+                });
+              } catch (chunkError) {
+                console.error('Error updating message chunk:', chunkError);
+                // Continue despite error in UI update
+              }
             }
-            return newMessages;
-          });
-        }
-      );
+          ),
+          // Additional safety timeout
+          new Promise((_, reject) =>
+            setTimeout(() => reject(new Error('App-level safety timeout - generation interrupted')), 
+            aiMode === 'offline' ? 150000 : 90000) // 2.5 min offline, 1.5 min online
+          )
+        ]);
+      } catch (generationError) {
+        console.error('Generation error:', generationError);
+        // Try to recover with partial response
+        result = {
+          success: false,
+          text: messagesWithPlaceholder[messagesWithPlaceholder.length - 1]?.text || 'Generation interrupted. Please try again.',
+          error: generationError.message,
+          mode: aiMode
+        };
+      }
       
       // Ensure we have a valid response text
       const finalText = result?.text || 'Error: No response generated. Please try again.';
