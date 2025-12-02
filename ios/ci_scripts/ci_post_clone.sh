@@ -2,7 +2,7 @@
 
 # Xcode Cloud Post-Clone Script
 # This script runs after Xcode Cloud clones your repository
-# It installs Node.js and CocoaPods dependencies before building
+# It installs Node.js, npm dependencies, and CocoaPods before building
 
 set -e
 
@@ -37,7 +37,21 @@ else
 fi
 
 # Ensure node is in PATH
-export PATH="/opt/homebrew/bin:$PATH"
+export PATH="/usr/local/bin:/opt/homebrew/bin:$PATH"
+
+# Navigate to repository root and install npm dependencies
+echo "📦 Installing npm dependencies..."
+cd "$CI_PRIMARY_REPOSITORY_PATH"
+echo "Current directory: $PWD"
+
+if [ -f "package.json" ]; then
+    echo "Running npm install..."
+    npm install
+    echo "✅ npm dependencies installed"
+else
+    echo "❌ Error: package.json not found"
+    exit 1
+fi
 
 # Navigate to iOS directory
 if [ -d "$CI_PRIMARY_REPOSITORY_PATH/ios" ]; then
@@ -66,5 +80,5 @@ fi
 echo "Running pod install..."
 pod install
 
-echo "✅ Dependencies installation complete!"
+echo "✅ All dependencies installation complete!"
 echo "========================================"
