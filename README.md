@@ -6,7 +6,7 @@
 ![Platform](https://img.shields.io/badge/platform-iOS%20%7C%20Android-lightgrey.svg)
 ![React Native](https://img.shields.io/badge/React%20Native-0.81.5-61DAFB.svg)
 ![Expo](https://img.shields.io/badge/Expo-54.0.0-000020.svg)
-![License](https://img.shields.io/badge/license-MIT-green.svg)
+![License](https://img.shields.io/badge/license-MIT%20%2B%20Commons%20Clause-orange.svg)
 
 **A powerful dual-mode AI assistant that works both online and offline**
 
@@ -404,7 +404,15 @@ Contributions are welcome! Please follow these steps:
 
 ## 📄 License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+This project is licensed under the **MIT License with Commons Clause** - see the [LICENSE](LICENSE) file for details.
+
+**What this means:**
+- ✅ You can view, modify, and use the code for personal/educational purposes
+- ✅ Internal business use is permitted
+- ❌ You cannot sell this software or create competing App Store apps
+- ❌ Commercial SaaS offerings are not permitted without permission
+
+For commercial licensing inquiries, please contact: daniel@vortex55.com
 
 ---
 
@@ -422,6 +430,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 - **Issues**: [GitHub Issues](https://github.com/Vortex555/mistral-ai-native/issues)
 - **Discussions**: [GitHub Discussions](https://github.com/Vortex555/mistral-ai-native/discussions)
+- **Email**: daniel@vortex55.com
 
 ---
 
