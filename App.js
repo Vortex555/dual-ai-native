@@ -42,7 +42,9 @@ export default function App() {
   const [chatSessions, setChatSessions] = useState([]);
   const [currentSessionId, setCurrentSessionId] = useState(null);
   const [aiMode, setAiMode] = useState('online'); // 'online' or 'offline'
+  const [onlineProvider, setOnlineProvider] = useState('groq'); // 'groq', 'openai', or 'claude'
   const [apiKey, setApiKey] = useState('');
+  const [apiKeys, setApiKeys] = useState({ groq: '', openai: '', claude: '' });
   const [performanceMode, setPerformanceMode] = useState('uncensored'); // 'fast', 'balanced', or 'uncensored'
   const scrollViewRef = useRef();
   const modelDownloader = useRef(new ModelDownloader());
@@ -133,17 +135,35 @@ export default function App() {
       const savedMode = await AsyncStorage.getItem('ai_mode');
       const savedApiKey = await AsyncStorage.getItem('api_key');
       const savedPerfMode = await AsyncStorage.getItem('performance_mode');
-      
+      const savedProvider = await AsyncStorage.getItem('online_provider');
+      const savedApiKeys = await AsyncStorage.getItem('api_keys');
+
       if (savedMode) setAiMode(savedMode);
-      if (savedApiKey) {
-        setApiKey(savedApiKey);
-        aiService.current.setApiKey(savedApiKey);
+
+      // Load per-provider API keys
+      const provider = savedProvider || 'groq';
+      setOnlineProvider(provider);
+
+      let keys = { groq: '', openai: '', claude: '' };
+      if (savedApiKeys) {
+        keys = { ...keys, ...JSON.parse(savedApiKeys) };
       }
+      // Migrate old single api_key to groq if needed
+      if (savedApiKey && !keys.groq) {
+        keys.groq = savedApiKey;
+      }
+      setApiKeys(keys);
+
+      const activeKey = keys[provider] || '';
+      setApiKey(activeKey);
+      aiService.current.setApiKey(activeKey);
+      aiService.current.setOnlineProvider(provider);
+
       if (savedPerfMode) {
         setPerformanceMode(savedPerfMode);
         aiService.current.setPerformanceMode(savedPerfMode);
       }
-      
+
       aiService.current.setMode(savedMode || 'online');
     } catch (error) {
       console.error('Error loading settings:', error);
@@ -153,14 +173,21 @@ export default function App() {
   const saveSettings = async (mode, key) => {
     try {
       await AsyncStorage.setItem('ai_mode', mode);
+      await AsyncStorage.setItem('online_provider', onlineProvider);
+
+      // Save per-provider key
+      const updatedKeys = { ...apiKeys };
       if (key) {
         const trimmedKey = key.trim();
-        await AsyncStorage.setItem('api_key', trimmedKey);
+        updatedKeys[onlineProvider] = trimmedKey;
+        setApiKeys(updatedKeys);
         aiService.current.setApiKey(trimmedKey);
-        console.log('API key saved, length:', trimmedKey.length);
+        console.log('API key saved for', onlineProvider, ', length:', trimmedKey.length);
       }
-      
+      await AsyncStorage.setItem('api_keys', JSON.stringify(updatedKeys));
+
       aiService.current.setMode(mode);
+      aiService.current.setOnlineProvider(onlineProvider);
     } catch (error) {
       console.error('Error saving settings:', error);
     }
@@ -878,8 +905,8 @@ export default function App() {
           <View style={styles.headerLeft}>
             <Ionicons name="phone-portrait" size={20} color="#4CAF50" />
             <Text style={styles.headerTitle}>Dual AI</Text>
-            <View style={[styles.modeBadge, { backgroundColor: aiMode === 'online' ? '#2196F3' : '#4CAF50' }]}>
-              <Text style={styles.modeText}>{aiMode === 'online' ? 'ONLINE' : 'OFFLINE'}</Text>
+            <View style={[styles.modeBadge, { backgroundColor: aiMode === 'offline' ? '#4CAF50' : onlineProvider === 'groq' ? '#F55036' : onlineProvider === 'openai' ? '#10a37f' : '#d97706' }]}>
+              <Text style={styles.modeText}>{aiMode === 'offline' ? 'OFFLINE' : onlineProvider === 'groq' ? 'GROQ' : onlineProvider === 'openai' ? 'CHATGPT' : 'CLAUDE'}</Text>
             </View>
           </View>
           <View style={styles.headerButtons}>
@@ -1062,21 +1089,65 @@ export default function App() {
                 </TouchableOpacity>
               </View>
 
+              {/* Online Provider Selection */}
+              {aiMode === 'online' && (
+                <View style={styles.settingSection}>
+                  <Text style={styles.sectionTitle}>Online Provider</Text>
+
+                  {[
+                    { key: 'groq', label: 'Groq', desc: 'Llama 3.3 70B (free, fast)', color: '#F55036' },
+                    { key: 'openai', label: 'ChatGPT', desc: 'GPT-4o Mini', color: '#10a37f' },
+                    { key: 'claude', label: 'Claude', desc: 'Claude Sonnet 4', color: '#d97706' },
+                  ].map((p) => (
+                    <TouchableOpacity
+                      key={p.key}
+                      style={[styles.modeOption, onlineProvider === p.key && { borderColor: p.color, borderWidth: 1 }]}
+                      onPress={() => {
+                        setOnlineProvider(p.key);
+                        const newKey = apiKeys[p.key] || '';
+                        setApiKey(newKey);
+                        aiService.current.setApiKey(newKey);
+                        aiService.current.setOnlineProvider(p.key);
+                        AsyncStorage.setItem('online_provider', p.key);
+                      }}
+                    >
+                      <View style={styles.modeOptionLeft}>
+                        <View style={[styles.providerDot, { backgroundColor: p.color }]} />
+                        <View style={styles.modeOptionText}>
+                          <Text style={[styles.modeOptionTitle, onlineProvider === p.key && { color: p.color }]}>
+                            {p.label}
+                          </Text>
+                          <Text style={styles.modeOptionDesc}>{p.desc}</Text>
+                        </View>
+                      </View>
+                      {onlineProvider === p.key && <Ionicons name="checkmark-circle" size={24} color={p.color} />}
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              )}
+
               {/* API Key for Online Mode */}
               {aiMode === 'online' && (
                 <View style={styles.settingSection}>
-                  <Text style={styles.sectionTitle}>Groq API Key</Text>
+                  <Text style={styles.sectionTitle}>
+                    {onlineProvider === 'groq' ? 'Groq' : onlineProvider === 'openai' ? 'OpenAI' : 'Anthropic'} API Key
+                  </Text>
                   <Text style={styles.sectionDesc}>
-                    Get a free API key from console.groq.com
+                    {onlineProvider === 'groq' && 'Get a free API key from console.groq.com'}
+                    {onlineProvider === 'openai' && 'Get an API key from platform.openai.com'}
+                    {onlineProvider === 'claude' && 'Get an API key from console.anthropic.com'}
                   </Text>
                   <TextInput
                     style={styles.apiKeyInput}
                     value={apiKey}
                     onChangeText={(text) => {
                       setApiKey(text);
-                      saveSettings(aiMode, text);
+                      const updatedKeys = { ...apiKeys, [onlineProvider]: text };
+                      setApiKeys(updatedKeys);
+                      aiService.current.setApiKey(text.trim());
+                      AsyncStorage.setItem('api_keys', JSON.stringify(updatedKeys));
                     }}
-                    placeholder="Enter your API key..."
+                    placeholder={`Enter your ${onlineProvider === 'groq' ? 'Groq' : onlineProvider === 'openai' ? 'OpenAI' : 'Anthropic'} API key...`}
                     placeholderTextColor="#666"
                     autoCapitalize="none"
                     autoCorrect={false}
@@ -1225,10 +1296,10 @@ export default function App() {
                   This app can run in two modes:{'\n\n'}
                   
                   <Text style={{ fontWeight: 'bold', color: '#2196F3' }}>Online Mode:</Text>{'\n'}
-                  • Uses Groq's fast API{'\n'}
-                  • Requires internet connection{'\n'}
-                  • Free with API key{'\n'}
-                  • Instant responses{'\n\n'}
+                  • Groq (Llama 3.3 70B - free){'\n'}
+                  • ChatGPT (GPT-4o Mini){'\n'}
+                  • Claude (Sonnet 4){'\n'}
+                  • Requires internet + API key{'\n\n'}
                   
                   <Text style={{ fontWeight: 'bold', color: '#4CAF50' }}>Offline Mode:</Text>{'\n'}
                   • Runs Dolphin X1 8B locally{'\n'}
@@ -1788,6 +1859,11 @@ const styles = StyleSheet.create({
   modeOptionDesc: {
     fontSize: 13,
     color: '#999',
+  },
+  providerDot: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
   },
   perfModeOption: {
     flexDirection: 'row',

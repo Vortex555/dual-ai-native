@@ -5,6 +5,7 @@ import { initLlama, convertJsonSchemaToGrammar, } from 'llama.rn';
 export class AIService {
   constructor() {
     this.mode = 'online'; // 'online' or 'offline'
+    this.onlineProvider = 'groq'; // 'groq', 'openai', or 'claude'
     this.apiKey = null;
     this.llamaContext = null;
     this.promptCache = new Map(); // Cache processed prompts
@@ -15,6 +16,34 @@ export class AIService {
 
   setMode(mode) {
     this.mode = mode;
+  }
+
+  setOnlineProvider(provider) {
+    if (['groq', 'openai', 'claude'].includes(provider)) {
+      this.onlineProvider = provider;
+      console.log(`Online provider set to: ${provider}`);
+    }
+  }
+
+  getProviderConfig() {
+    const configs = {
+      groq: {
+        url: 'https://api.groq.com/openai/v1/chat/completions',
+        model: 'llama-3.3-70b-versatile',
+        authHeader: (key) => `Bearer ${key}`,
+      },
+      openai: {
+        url: 'https://api.openai.com/v1/chat/completions',
+        model: 'gpt-4o-mini',
+        authHeader: (key) => `Bearer ${key}`,
+      },
+      claude: {
+        url: 'https://api.anthropic.com/v1/messages',
+        model: 'claude-sonnet-4-20250514',
+        authHeader: (key) => key,
+      },
+    };
+    return configs[this.onlineProvider] || configs.groq;
   }
 
   stopGeneration() {
@@ -97,28 +126,34 @@ export class AIService {
     }
   }
 
-  // Online mode using Groq API (free, fast)
+  // Online mode - routes to the selected provider
   async generateOnline(messages, onChunk) {
+    if (this.onlineProvider === 'claude') {
+      return await this.generateClaude(messages, onChunk);
+    }
+    return await this.generateOpenAICompatible(messages, onChunk);
+  }
+
+  // OpenAI-compatible API (works for Groq and OpenAI)
+  async generateOpenAICompatible(messages, onChunk) {
+    const config = this.getProviderConfig();
     try {
-      console.log('API Key check:', this.apiKey ? `Key present (${this.apiKey.length} chars)` : 'No key');
-      
-      // Format messages for API
+      console.log(`[${this.onlineProvider}] API Key check:`, this.apiKey ? `Key present (${this.apiKey.length} chars)` : 'No key');
+
       const formattedMessages = messages.map(msg => ({
         role: msg.sender === 'user' ? 'user' : 'assistant',
         content: msg.text
       }));
 
-      // Add system message
       formattedMessages.unshift({
         role: 'system',
         content: 'You are a helpful AI assistant. Be concise and friendly.'
       });
 
-      // Using Groq API - non-streaming for React Native compatibility
       const response = await axios.post(
-        'https://api.groq.com/openai/v1/chat/completions',
+        config.url,
         {
-          model: 'llama-3.3-70b-versatile',
+          model: config.model,
           messages: formattedMessages,
           temperature: 0.7,
           max_tokens: 1024,
@@ -126,7 +161,7 @@ export class AIService {
         },
         {
           headers: {
-            'Authorization': `Bearer ${this.apiKey || 'gsk_demo_key'}`,
+            'Authorization': config.authHeader(this.apiKey || ''),
             'Content-Type': 'application/json'
           },
           timeout: 30000
@@ -135,58 +170,108 @@ export class AIService {
 
       if (response.data?.choices?.[0]?.message?.content) {
         const fullText = response.data.choices[0].message.content;
-        
-        // Simulate streaming effect by sending text word by word
+
         if (onChunk) {
           const words = fullText.split(' ');
           for (let i = 0; i < words.length; i++) {
             const word = words[i] + (i < words.length - 1 ? ' ' : '');
             onChunk(word);
-            // Small delay to create streaming effect
             await new Promise(resolve => setTimeout(resolve, 30));
           }
         }
-        
-        return {
-          success: true,
-          text: fullText,
-          mode: 'online'
-        };
+
+        return { success: true, text: fullText, mode: 'online' };
       } else {
         throw new Error('Invalid response format');
       }
 
     } catch (error) {
-      console.error('Online AI error:', error);
-      console.error('Error details:', error.response?.data);
-      console.error('Status:', error.response?.status);
-      
-      // Fallback to demo mode if API fails
-      if (error.response?.status === 401) {
-        return {
-          success: false,
-          error: 'Invalid API key. Please check your Groq API key in settings.',
-          text: this.getDemoResponse(messages),
-          mode: 'demo'
-        };
+      return this.handleOnlineError(error, messages);
+    }
+  }
+
+  // Claude API (uses Anthropic Messages API format)
+  async generateClaude(messages, onChunk) {
+    const config = this.getProviderConfig();
+    try {
+      console.log('[claude] API Key check:', this.apiKey ? `Key present (${this.apiKey.length} chars)` : 'No key');
+
+      const formattedMessages = messages.map(msg => ({
+        role: msg.sender === 'user' ? 'user' : 'assistant',
+        content: msg.text
+      }));
+
+      const response = await axios.post(
+        config.url,
+        {
+          model: config.model,
+          max_tokens: 1024,
+          system: 'You are a helpful AI assistant. Be concise and friendly.',
+          messages: formattedMessages,
+        },
+        {
+          headers: {
+            'x-api-key': config.authHeader(this.apiKey || ''),
+            'anthropic-version': '2023-06-01',
+            'Content-Type': 'application/json'
+          },
+          timeout: 30000
+        }
+      );
+
+      if (response.data?.content?.[0]?.text) {
+        const fullText = response.data.content[0].text;
+
+        if (onChunk) {
+          const words = fullText.split(' ');
+          for (let i = 0; i < words.length; i++) {
+            const word = words[i] + (i < words.length - 1 ? ' ' : '');
+            onChunk(word);
+            await new Promise(resolve => setTimeout(resolve, 30));
+          }
+        }
+
+        return { success: true, text: fullText, mode: 'online' };
+      } else {
+        throw new Error('Invalid response format');
       }
-      
-      if (error.response?.status === 400) {
-        return {
-          success: false,
-          error: `Bad request: ${error.response?.data?.error?.message || 'Check your API key and try again.'}`,
-          text: this.getDemoResponse(messages),
-          mode: 'demo'
-        };
-      }
-      
+
+    } catch (error) {
+      return this.handleOnlineError(error, messages);
+    }
+  }
+
+  handleOnlineError(error, messages) {
+    console.error('Online AI error:', error);
+    console.error('Error details:', error.response?.data);
+    console.error('Status:', error.response?.status);
+
+    const providerName = this.onlineProvider.charAt(0).toUpperCase() + this.onlineProvider.slice(1);
+
+    if (error.response?.status === 401) {
       return {
         success: false,
-        error: error.message,
+        error: `Invalid API key. Please check your ${providerName} API key in settings.`,
         text: this.getDemoResponse(messages),
         mode: 'demo'
       };
     }
+
+    if (error.response?.status === 400) {
+      return {
+        success: false,
+        error: `Bad request: ${error.response?.data?.error?.message || `Check your ${providerName} API key and try again.`}`,
+        text: this.getDemoResponse(messages),
+        mode: 'demo'
+      };
+    }
+
+    return {
+      success: false,
+      error: error.message,
+      text: this.getDemoResponse(messages),
+      mode: 'demo'
+    };
   }
 
   // Offline mode using local model
